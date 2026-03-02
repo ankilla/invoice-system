@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Invoice System{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<div class="grid-3" style="margin-bottom:20px">
+  <a href="/invoice/new" class="card" style="text-decoration:none;text-align:center;cursor:pointer;transition:.2s;border:2px solid var(--primary-light)">
+    <div style="font-size:36px;margin-bottom:8px">📄</div>
+    <div style="font-size:15px;font-weight:700;color:var(--primary)">New Invoice</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">Create a new invoice</div>
+  </a>
+  <a href="/invoice/search" class="card" style="text-decoration:none;text-align:center;cursor:pointer;transition:.2s">
+    <div style="font-size:36px;margin-bottom:8px">🔍</div>
+    <div style="font-size:15px;font-weight:700;color:var(--primary)">Search Invoices</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">View, edit, print invoices</div>
+  </a>
+  <a href="/owner" class="card" style="text-decoration:none;text-align:center;cursor:pointer;transition:.2s">
+    <div style="font-size:36px;margin-bottom:8px">🏢</div>
+    <div style="font-size:15px;font-weight:700;color:var(--primary)">Owner Details</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">Manage company info</div>
+  </a>
+</div>
+<div class="grid-2">
+  <a href="/customers" class="card" style="text-decoration:none;cursor:pointer">
+    <div class="card-header">
+      <div class="card-title"><i class="fa fa-users"></i> Customers</div>
+      <span id="cust-count" class="badge badge-info">...</span>
+    </div>
+    <p style="font-size:13px;color:var(--muted)">Manage customer master data, codes, and addresses.</p>
+  </a>
+  <a href="/products" class="card" style="text-decoration:none;cursor:pointer">
+    <div class="card-header">
+      <div class="card-title"><i class="fa fa-box"></i> Products</div>
+      <span id="prod-count" class="badge badge-info">...</span>
+    </div>
+    <p style="font-size:13px;color:var(--muted)">Manage product codes, descriptions and rates.</p>
+  </a>
+</div>
+<div class="card">
+  <div class="card-header"><div class="card-title"><i class="fa fa-clock"></i> Recent Invoices</div></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Invoice No</th><th>Date</th><th>Customer</th><th>Net Payable</th><th>Action</th></tr></thead>
+      <tbody id="recent-tbody">
+        <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(async()=>{
+  const custs=await api('/api/customers');
+  document.getElementById('cust-count').textContent=custs.length+' records';
+  const prods=await api('/api/products');
+  document.getElementById('prod-count').textContent=prods.length+' records';
+
+  // Recent invoices via date search — we'll fetch all by using a broad query
+  const tbody=document.getElementById('recent-tbody');
+  try{
+    const res=await fetch('/api/invoices/by_date?date=');
+    // We need a different approach - just show from search page
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted)"><a href="/invoice/search" style="color:var(--primary-light)">Click here to view all invoices →</a></td></tr>';
+  }catch(e){tbody.innerHTML='<tr><td colspan="5" style="color:var(--muted);text-align:center">No data</td></tr>';}
+})();
+</script>
+{% endblock %}

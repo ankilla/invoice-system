@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Invoice Search{% endblock %}
+{% block page_title %}View / Edit Invoices{% endblock %}
+{% block extra_head %}
+<style>
+.search-tabs{display:flex;gap:0;margin-bottom:0;border-bottom:2px solid var(--border)}
+.tab-btn{padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:.15s}
+.tab-btn.active{color:var(--primary-light);border-bottom-color:var(--primary-light)}
+.tab-panel{display:none;padding-top:16px}
+.tab-panel.active{display:block}
+.grid-panel{background:#f8faff;border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px}
+.grid-panel h4{font-size:12px;text-transform:uppercase;font-weight:700;color:var(--primary);letter-spacing:.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.clickable-row{cursor:pointer}
+.clickable-row:hover td{background:#e8f0fe !important}
+.selected-row td{background:#dbeafe !important;font-weight:600}
+.section-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:4px 12px;background:#eef2f7}
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="card">
+  <div class="search-tabs">
+    <button class="tab-btn active" onclick="switchTab('name')"><i class="fa fa-user"></i> Search by Customer Name</button>
+    <button class="tab-btn" onclick="switchTab('date')"><i class="fa fa-calendar"></i> Search by Date</button>
+  </div>
+
+  <!-- TAB: BY NAME -->
+  <div class="tab-panel active" id="tab-name">
+    <div class="search-bar" style="margin-bottom:12px">
+      <input class="form-control" id="name-input" placeholder="🔍  Type customer name (e.g. 'chan' shows all matching)..." oninput="searchByName(this.value)" autocomplete="off" style="max-width:400px">
+      <button class="btn btn-primary" onclick="searchByName(document.getElementById('name-input').value)"><i class="fa fa-search"></i> Search</button>
+    </div>
+
+    <!-- Customer results grid -->
+    <div class="grid-panel" id="cust-result-panel" style="display:none">
+      <h4><i class="fa fa-users"></i> Customers Found <small id="cust-hint" style="font-weight:400;color:var(--muted);font-size:11px;margin-left:8px">Double-click a row to see invoices</small></h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Code</th><th>Name</th><th>Phone</th><th>State</th><th>GSTIN</th></tr></thead>
+          <tbody id="cust-result-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Invoices for selected customer -->
+    <div class="grid-panel" id="inv-by-cust-panel" style="display:none">
+      <h4><i class="fa fa-file-invoice"></i> Invoices for: <span id="selected-cust-name" style="color:var(--primary-light)"></span>
+        <small style="font-weight:400;color:var(--muted);font-size:11px;margin-left:8px">Double-click to open invoice</small>
+      </h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Invoice No</th><th>Date</th><th>Total Qty</th><th>Net Payable</th><th>Transport</th><th>Action</th></tr></thead>
+          <tbody id="inv-by-cust-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: BY DATE -->
+  <div class="tab-panel" id="tab-date">
+    <div class="search-bar" style="margin-bottom:12px">
+      <input class="form-control" type="date" id="date-input" oninput="searchByDate(this.value)" style="max-width:220px">
+      <button class="btn btn-primary" onclick="searchByDate(document.getElementById('date-input').value)"><i class="fa fa-search"></i> Search</button>
+    </div>
+    <div class="grid-panel" id="inv-by-date-panel" style="display:none">
+      <h4><i class="fa fa-calendar"></i> Invoices on: <span id="selected-date-label" style="color:var(--primary-light)"></span>
+        <small style="font-weight:400;color:var(--muted);font-size:11px;margin-left:8px">Click to open invoice</small>
+      </h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Invoice No</th><th>Customer</th><th>Total Qty</th><th>Net Payable</th><th>Transport</th><th>Action</th></tr></thead>
+          <tbody id="inv-by-date-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    b.classList.toggle('active', (i===0&&tab==='name')||(i===1&&tab==='date'));
+  });
+  document.querySelectorAll('.tab-panel').forEach((p,i)=>{
+    p.classList.toggle('active', (i===0&&tab==='name')||(i===1&&tab==='date'));
+  });
+}
+
+// ── BY NAME ──
+let nameTimeout;
+async function searchByName(q){
+  clearTimeout(nameTimeout);
+  if(!q.trim()){document.getElementById('cust-result-panel').style.display='none';return;}
+  nameTimeout=setTimeout(async()=>{
+    const data=await api('/api/customers/search?q='+encodeURIComponent(q));
+    const panel=document.getElementById('cust-result-panel');
+    const tbody=document.getElementById('cust-result-body');
+    if(!data.length){
+      tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No customers found</td></tr>';
+      panel.style.display='block';
+      document.getElementById('inv-by-cust-panel').style.display='none';
+      return;
+    }
+    tbody.innerHTML=data.map(c=>`<tr class="clickable-row" ondblclick="loadCustInvoices(${c.id},'${c.name.replace(/'/g,"\\'")}')">
+      <td><span class="badge badge-info">${c.customer_code}</span></td>
+      <td><b>${c.name}</b></td>
+      <td>${c.phone||'—'}</td>
+      <td>${c.state||'—'}</td>
+      <td><small>${c.gstin||'—'}</small></td>
+    </tr>`).join('');
+    panel.style.display='block';
+    document.getElementById('inv-by-cust-panel').style.display='none';
+  },200);
+}
+
+async function loadCustInvoices(custId, custName){
+  // Highlight selected row
+  document.querySelectorAll('#cust-result-body tr').forEach(tr=>tr.classList.remove('selected-row'));
+  event.currentTarget.classList.add('selected-row');
+
+  document.getElementById('selected-cust-name').textContent=custName;
+  const data=await api('/api/invoices/by_customer/'+custId);
+  const tbody=document.getElementById('inv-by-cust-body');
+  if(!data.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">No invoices found for this customer</td></tr>';
+    document.getElementById('inv-by-cust-panel').style.display='block';
+    return;
+  }
+  tbody.innerHTML=data.map(inv=>`<tr class="clickable-row" ondblclick="openInvoice(${inv.id})">
+    <td><b style="color:var(--primary-light)">${inv.invoice_no}</b></td>
+    <td>${inv.date}</td>
+    <td style="text-align:right">${inv.total_qty||0}</td>
+    <td style="text-align:right;font-weight:700">₹${parseFloat(inv.net_payable||0).toFixed(2)}</td>
+    <td>${inv.transport||'—'}</td>
+    <td>
+      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openInvoice(${inv.id})"><i class="fa fa-edit"></i> Open</button>
+      <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewPDF(${inv.id})"><i class="fa fa-file-pdf"></i> PDF</button>
+    </td>
+  </tr>`).join('');
+  document.getElementById('inv-by-cust-panel').style.display='block';
+}
+
+// ── BY DATE ──
+async function searchByDate(date){
+  if(!date) return;
+  const data=await api('/api/invoices/by_date?date='+date);
+  document.getElementById('selected-date-label').textContent=new Date(date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const tbody=document.getElementById('inv-by-date-body');
+  if(!data.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">No invoices on this date</td></tr>';
+    document.getElementById('inv-by-date-panel').style.display='block';
+    return;
+  }
+  tbody.innerHTML=data.map(inv=>`<tr class="clickable-row" onclick="openInvoice(${inv.id})">
+    <td><b style="color:var(--primary-light)">${inv.invoice_no}</b></td>
+    <td><b>${inv.customer_name}</b></td>
+    <td style="text-align:right">${inv.total_qty||0}</td>
+    <td style="text-align:right;font-weight:700">₹${parseFloat(inv.net_payable||0).toFixed(2)}</td>
+    <td>${inv.transport||'—'}</td>
+    <td>
+      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openInvoice(${inv.id})"><i class="fa fa-edit"></i> Open</button>
+      <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewPDF(${inv.id})"><i class="fa fa-file-pdf"></i> PDF</button>
+    </td>
+  </tr>`).join('');
+  document.getElementById('inv-by-date-panel').style.display='block';
+}
+
+function openInvoice(id){
+  window.location.href='/invoice/'+id+'/edit';
+}
+function viewPDF(id){
+  window.open('/api/invoices/'+id+'/pdf','_blank');
+}
+
+// Set today's date as default
+document.getElementById('date-input').value=new Date().toISOString().split('T')[0];
+</script>
+{% endblock %}

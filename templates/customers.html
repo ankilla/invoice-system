@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Customers{% endblock %}
+{% block page_title %}Customer Master{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title"><i class="fa fa-users"></i> Customers</div>
+    <button class="btn btn-primary" onclick="openModal()"><i class="fa fa-plus"></i> Add Customer</button>
+  </div>
+  <div class="search-bar">
+    <input class="form-control" id="search-input" placeholder="🔍  Search by name, code, phone..." oninput="searchCustomers(this.value)">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Code</th><th>Name</th><th>Phone</th><th>State</th><th>GSTIN</th><th>Email</th><th style="width:100px">Actions</th></tr></thead>
+      <tbody id="cust-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Add Customer</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <form id="cust-form">
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Customer Code (Auto)</label>
+          <input class="form-control" name="customer_code" readonly placeholder="Auto-generated">
+        </div>
+        <div class="form-group">
+          <label>Customer Name *</label>
+          <input class="form-control" name="name" required placeholder="Full name" oninput="previewCode(this.value)">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Address</label>
+          <textarea class="form-control" name="address" rows="2" placeholder="Street, City, Pincode"></textarea>
+        </div>
+        <div class="form-group">
+          <label>State</label>
+          <input class="form-control" name="state" placeholder="State name">
+        </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <input class="form-control" name="phone" placeholder="Mobile / landline">
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input class="form-control" name="email" type="email" placeholder="email@example.com">
+        </div>
+        <div class="form-group">
+          <label>GSTIN</label>
+          <input class="form-control" name="gstin" placeholder="GST number" style="text-transform:uppercase">
+        </div>
+      </div>
+      <div style="margin-top:18px;display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary" id="save-btn"><i class="fa fa-save"></i> Save Customer</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let allCustomers=[];
+
+async function loadCustomers(q=''){
+  const url=q?`/api/customers/search?q=${encodeURIComponent(q)}`:'/api/customers';
+  allCustomers=await api(url);
+  renderTable(allCustomers);
+}
+
+function renderTable(data){
+  const tbody=document.getElementById('cust-tbody');
+  if(!data.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No customers found</td></tr>';return;}
+  tbody.innerHTML=data.map(c=>`<tr>
+    <td><span class="badge badge-info">${c.customer_code}</span></td>
+    <td><b>${c.name}</b></td>
+    <td>${c.phone||'—'}</td>
+    <td>${c.state||'—'}</td>
+    <td><small>${c.gstin||'—'}</small></td>
+    <td><small>${c.email||'—'}</small></td>
+    <td>
+      <button class="btn btn-outline btn-sm" onclick="editCustomer(${c.id})"><i class="fa fa-edit"></i></button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCustomer(${c.id},'${c.name.replace(/'/g,"\\'")}')"><i class="fa fa-trash"></i></button>
+    </td>
+  </tr>`).join('');
+}
+
+function searchCustomers(q){ loadCustomers(q); }
+
+function openModal(data=null){
+  const form=document.getElementById('cust-form');
+  form.reset();
+  document.getElementById('modal-title').textContent=data?'Edit Customer':'Add Customer';
+  if(data){
+    Object.keys(data).forEach(k=>{const el=form.querySelector('[name="'+k+'"]');if(el)el.value=data[k]||'';});
+  }
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); }
+
+function previewCode(name){
+  const form=document.getElementById('cust-form');
+  const idField=form.querySelector('[name="id"]');
+  if(!idField.value && name.length>0){
+    const base=name.replace(/[^A-Za-z]/g,'').toUpperCase().substring(0,4).padEnd(2,'X');
+    form.querySelector('[name="customer_code"]').value=base+'###';
+  }
+}
+
+async function editCustomer(id){
+  const data=await api('/api/customers/'+id);
+  openModal(data);
+}
+
+async function deleteCustomer(id,name){
+  if(!confirm(`Delete customer "${name}"?`)) return;
+  const r=await api('/api/customers/'+id,'DELETE');
+  if(r.success){toast('Customer deleted');loadCustomers(document.getElementById('search-input').value);}
+  else toast('Error: '+r.error,'error');
+}
+
+document.getElementById('cust-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const form=e.target;
+  const btn=document.getElementById('save-btn');
+  btn.innerHTML='<span class="spinner"></span>'; btn.disabled=true;
+  const data={};
+  new FormData(form).forEach((v,k)=>data[k]=v);
+  const id=data.id; delete data.id;
+  let r;
+  if(id){ r=await api('/api/customers/'+id,'PUT',data); }
+  else { r=await api('/api/customers','POST',data); }
+  btn.innerHTML='<i class="fa fa-save"></i> Save Customer'; btn.disabled=false;
+  if(r.success){
+    toast(id?'Customer updated!':'Customer added!');
+    closeModal();
+    loadCustomers(document.getElementById('search-input').value);
+  } else toast('Error: '+r.error,'error');
+});
+
+loadCustomers();
+</script>
+{% endblock %}

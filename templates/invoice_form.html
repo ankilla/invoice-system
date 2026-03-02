@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+{% block title %}{% if mode=='new' %}New Invoice{% else %}Edit Invoice{% endif %}{% endblock %}
+{% block page_title %}{% if mode=='new' %}New Invoice{% else %}Edit Invoice #<span id="inv-no-title"></span>{% endif %}{% endblock %}
+{% block extra_head %}
+<style>
+.section-divider{font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.6px;border-bottom:2px solid var(--primary);padding-bottom:6px;margin:18px 0 12px}
+.ship-toggle{display:flex;gap:12px;margin-bottom:12px}
+.ship-toggle label{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600}
+#ship-extra{background:#fff9f0;border:1px solid #fed7aa;border-radius:8px;padding:14px;margin-bottom:12px;display:none}
+.totals-bar{background:#f0f4f8;border:1px solid #c5d0de;border-radius:8px;padding:12px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px}
+.totals-bar .t-item{text-align:center}
+.totals-bar .t-label{font-size:10px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.totals-bar .t-val{font-size:17px;font-weight:700;color:var(--primary);margin-top:2px}
+.charges-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+.net-payable-box{background:linear-gradient(135deg,var(--primary),var(--primary-light));color:#fff;border-radius:10px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin:14px 0}
+.net-payable-box .label{font-size:12px;opacity:.8;font-weight:600}
+.net-payable-box .amount{font-size:26px;font-weight:800}
+.words-box{background:#fffde7;border:1px solid #fde68a;border-radius:7px;padding:10px 14px;font-size:12px;font-weight:700;color:#7c5c00;margin-bottom:14px}
+.action-bar{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;padding-top:16px;border-top:2px solid var(--border)}
+</style>
+{% endblock %}
+{% block content %}
+<form id="invoice-form">
+<input type="hidden" id="invoice-id" value="{{ inv_id if inv_id else '' }}">
+
+<!-- ── TOP META ── -->
+<div class="card">
+  <div class="section-divider"><i class="fa fa-file-invoice"></i> Invoice Details</div>
+  <div class="form-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="form-group">
+      <label>Invoice No *</label>
+      <input class="form-control" id="invoice_no" name="invoice_no" required readonly style="font-weight:700;color:var(--primary);font-size:15px">
+    </div>
+    <div class="form-group">
+      <label>Date *</label>
+      <input class="form-control" id="inv_date" name="date" type="date" required>
+    </div>
+    <div class="form-group">
+      <label>Transport</label>
+      <input class="form-control" id="transport" name="transport" placeholder="Transport name">
+    </div>
+    <div class="form-group">
+      <label>LR No</label>
+      <input class="form-control" id="lr_no" name="lr_no" placeholder="LR number">
+    </div>
+    <div class="form-group">
+      <label>No. of Bundles</label>
+      <input class="form-control" id="no_of_bundles" name="no_of_bundles" placeholder="e.g. 2CB">
+    </div>
+    <div class="form-group">
+      <label>Place of Supply</label>
+      <input class="form-control" id="place_of_supply" name="place_of_supply" placeholder="State / City">
+    </div>
+  </div>
+</div>
+
+<!-- ── CUSTOMER ── -->
+<div class="card">
+  <div class="section-divider"><i class="fa fa-user"></i> Billing Details</div>
+  <div class="form-grid" style="grid-template-columns:1fr 1fr">
+    <div class="form-group">
+      <label>Select Customer *</label>
+      <div class="autocomplete-wrap">
+        <input class="form-control" id="cust-search" placeholder="Type name or code to search..." autocomplete="off">
+        <div class="autocomplete-list" id="cust-list" style="display:none"></div>
+      </div>
+      <input type="hidden" id="customer_id" name="customer_id">
+    </div>
+    <div class="form-group">
+      <label>Customer Code</label>
+      <input class="form-control" id="cust-code" readonly placeholder="Auto-filled">
+    </div>
+    <div class="form-group" style="grid-column:1/-1">
+      <label>Billing Address</label>
+      <textarea class="form-control" id="cust-addr" readonly rows="2"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Phone</label>
+      <input class="form-control" id="cust-phone" readonly>
+    </div>
+    <div class="form-group">
+      <label>GSTIN</label>
+      <input class="form-control" id="cust-gstin" readonly>
+    </div>
+    <div class="form-group">
+      <label>State</label>
+      <input class="form-control" id="cust-state" readonly>
+    </div>
+  </div>
+
+  <div class="section-divider" style="margin-top:16px"><i class="fa fa-truck"></i> Shipping Address</div>
+  <div class="ship-toggle">
+    <label><input type="radio" name="ship_type" value="same" checked onchange="toggleShip(this)"> Same as Billing</label>
+    <label><input type="radio" name="ship_type" value="other" onchange="toggleShip(this)"> Different Address</label>
+  </div>
+  <div id="ship-extra">
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Shipping Address</label>
+        <textarea class="form-control" id="ship_address" name="ship_address" rows="2" placeholder="Full shipping address"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Mobile (Shipping)</label>
+        <input class="form-control" id="ship_mobile" name="ship_mobile" placeholder="Contact at delivery">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ITEMS ── -->
+<div class="card">
+  <div class="section-divider"><i class="fa fa-list"></i> Invoice Items</div>
+  <div style="overflow-x:auto">
+  <table class="items-table" id="items-table">
+    <thead>
+      <tr>
+        <th style="width:38px">S.No</th>
+        <th style="width:90px">Code</th>
+        <th style="min-width:180px">Description</th>
+        <th style="width:65px">Qty</th>
+        <th style="width:80px">Rate (₹)</th>
+        <th style="width:95px">Gross Amt</th>
+        <th style="width:60px">Disc %</th>
+        <th style="width:95px">Net Amt</th>
+        <th style="width:36px"></th>
+      </tr>
+    </thead>
+    <tbody id="items-body"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="text-align:center;font-weight:700;color:var(--primary)">TOTAL</td>
+        <td id="foot-qty" style="text-align:right"></td>
+        <td></td>
+        <td id="foot-gross" style="text-align:right"></td>
+        <td></td>
+        <td id="foot-net" style="text-align:right"></td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+  <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px" onclick="addRow()">
+    <i class="fa fa-plus"></i> Add Row
+  </button>
+</div>
+
+<!-- ── CHARGES ── -->
+<div class="card">
+  <div class="section-divider"><i class="fa fa-calculator"></i> Charges &amp; Summary</div>
+  <div class="charges-grid">
+    <div class="form-group">
+      <label>Freight Charges (₹)</label>
+      <input class="form-control" id="freight_charges" name="freight_charges" type="number" step="0.01" value="0" oninput="recalcAll()">
+    </div>
+    <div class="form-group">
+      <label>Gunni Charges (₹)</label>
+      <input class="form-control" id="gunni_charges" name="gunni_charges" type="number" step="0.01" value="0" oninput="recalcAll()">
+    </div>
+    <div class="form-group">
+      <label>Round Off (₹)</label>
+      <input class="form-control" id="round_off" name="round_off" type="number" step="0.01" value="0" oninput="recalcAll()">
+    </div>
+  </div>
+
+  <div class="net-payable-box">
+    <div><div class="label">NET PAYABLE</div><div id="net-words" style="font-size:11px;opacity:.85;margin-top:3px;font-weight:600">—</div></div>
+    <div><div class="label" style="text-align:right">Amount</div><div class="amount">₹<span id="net-payable-display">0.00</span></div></div>
+  </div>
+
+  <div class="section-divider"><i class="fa fa-file-contract"></i> Terms &amp; Conditions</div>
+  <textarea class="form-control" id="terms" name="terms" rows="4"
+    placeholder="1. All disputes subject to jurisdiction only.&#10;2. Goods once sold will not be taken back.&#10;3. Payment due within 30 days."></textarea>
+</div>
+
+<!-- ── ACTIONS ── -->
+<div class="action-bar">
+  <button type="submit" class="btn btn-success" id="save-btn"><i class="fa fa-save"></i> Save Invoice</button>
+  <button type="button" class="btn btn-primary" id="pdf-btn" onclick="downloadPDF()" style="display:none"><i class="fa fa-file-pdf"></i> Download PDF</button>
+  <button type="button" class="btn btn-accent" id="print-btn" onclick="printPDF()" style="display:none"><i class="fa fa-print"></i> Print</button>
+  <a href="/invoice/search" class="btn btn-outline"><i class="fa fa-arrow-left"></i> Back</a>
+</div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+const MODE='{{ mode }}';
+const INV_ID='{{ inv_id if inv_id else "" }}';
+let rowCount=0;
+let productCache={};
+
+// ── INIT ──
+(async()=>{
+  if(MODE==='new'){
+    const r=await api('/api/invoices/next_no');
+    document.getElementById('invoice_no').value=r.invoice_no;
+    document.getElementById('inv_date').value=new Date().toISOString().split('T')[0];
+    document.getElementById('invoice_no').readOnly=false;
+    addRow();
+    // Default terms
+    document.getElementById('terms').value=`1. All disputes subject to jurisdiction only.\n2. Goods once sold will not be taken back.\n3. Payment due within 30 days.`;
+  } else if(INV_ID){
+    await loadInvoice(INV_ID);
+  }
+  await loadProductCache();
+})();
+
+async function loadProductCache(){
+  const prods=await api('/api/products');
+  prods.forEach(p=>productCache[p.product_code.toUpperCase()]=p);
+}
+
+async function loadInvoice(id){
+  const data=await api('/api/invoices/'+id);
+  if(!data.id) return;
+  document.getElementById('invoice_no').value=data.invoice_no;
+  document.getElementById('inv_no-title') && (document.getElementById('inv_no-title').textContent=data.invoice_no);
+  document.getElementById('inv_date').value=data.date;
+  document.getElementById('transport').value=data.transport||'';
+  document.getElementById('lr_no').value=data.lr_no||'';
+  document.getElementById('no_of_bundles').value=data.no_of_bundles||'';
+  document.getElementById('place_of_supply').value=data.place_of_supply||'';
+  document.getElementById('freight_charges').value=data.freight_charges||0;
+  document.getElementById('gunni_charges').value=data.gunni_charges||0;
+  document.getElementById('round_off').value=data.round_off||0;
+  document.getElementById('terms').value=data.terms||'';
+
+  // Customer
+  if(data.customer){
+    fillCustomer(data.customer);
+    document.getElementById('cust-search').value=data.customer.name;
+  }
+
+  // Shipping
+  if(!data.ship_same_as_bill){
+    document.querySelector('[name="ship_type"][value="other"]').checked=true;
+    document.getElementById('ship-extra').style.display='block';
+    document.getElementById('ship_address').value=data.ship_address||'';
+    document.getElementById('ship_mobile').value=data.ship_mobile||'';
+  }
+
+  // Items
+  (data.items||[]).forEach(item=>addRow(item));
+  recalcAll();
+
+  // Show PDF buttons
+  document.getElementById('pdf-btn').style.display='';
+  document.getElementById('print-btn').style.display='';
+}
+
+// ── CUSTOMER AUTOCOMPLETE ──
+let custTimeout;
+
+document.getElementById('cust-search').addEventListener('input', function () {
+  clearTimeout(custTimeout);
+  const q = this.value.trim();
+
+  if (q.length < 1) {
+    document.getElementById('cust-list').style.display = 'none';
+    return;
+  }
+
+  custTimeout = setTimeout(async () => {
+    const data = await api('/api/customers/search?q=' + encodeURIComponent(q));
+    const list = document.getElementById('cust-list');
+
+    if (!data.length) {
+      list.style.display = 'none';
+      return;
+    }
+
+    list.innerHTML = data.map(c => `
+      <div class="autocomplete-item"
+           onclick='selectCustomer(${JSON.stringify(c)})'>
+        <strong>${c.name}</strong> 
+        <small style="color:gray">(${c.customer_code})</small>
+      </div>
+    `).join('');
+
+    list.style.display = 'block';
+  }, 300);
+});
+
+
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.autocomplete-wrap')) document.getElementById('cust-list').style.display='none';
+});
+
+function selectCustomer(customer) {
+  fillCustomer(customer);
+  document.getElementById('cust-search').value = customer.name;
+  document.getElementById('cust-list').style.display = 'none';
+}
+
+function fillCustomer(c){
+  document.getElementById('customer_id').value=c.id;
+  document.getElementById('cust-code').value=c.customer_code||'';
+  document.getElementById('cust-addr').value=c.address||'';
+  document.getElementById('cust-phone').value=c.phone||'';
+  document.getElementById('cust-gstin').value=c.gstin||'';
+  document.getElementById('cust-state').value=c.state||'';
+}
+
+function toggleShip(el){
+  document.getElementById('ship-extra').style.display=el.value==='other'?'block':'none';
+}
+
+// ── ITEMS ROWS ──
+function addRow(item=null){
+  rowCount++;
+  const sno=document.querySelectorAll('#items-body tr').length+1;
+  const tr=document.createElement('tr');
+  tr.id='row-'+rowCount;
+  const qty=item?item.qty:'';
+  const rate=item?item.rate:'';
+  const disc=item?item.discount_pct:0;
+  const gross=item?item.gross_amount:'';
+  const net=item?item.net_amount:'';
+  tr.innerHTML=`
+    <td class="sno-cell">${sno}</td>
+    <td><input class="text-left" type="text" placeholder="Code" value="${item?item.product_code:''}" oninput="onCodeInput(this)" onblur="lookupProduct(this)" style="text-transform:uppercase;width:100%;padding:4px 6px;border:none;background:transparent;font-size:12px" data-row="${rowCount}"></td>
+    <td><input class="text-left" type="text" placeholder="Description" value="${item?item.description:''}" style="width:100%;padding:4px 6px;border:none;background:transparent;font-size:12px" data-row="${rowCount}" data-field="desc"></td>
+    <td><input type="number" placeholder="0" value="${qty}" min="0" step="any" oninput="calcRow(this)" style="width:100%;padding:4px 6px;border:none;background:transparent;font-size:12px;text-align:right" data-row="${rowCount}" data-field="qty"></td>
+    <td><input type="number" placeholder="0.00" value="${rate}" min="0" step="0.01" oninput="calcRow(this)" style="width:100%;padding:4px 6px;border:none;background:transparent;font-size:12px;text-align:right" data-row="${rowCount}" data-field="rate"></td>
+    <td><input type="number" placeholder="0.00" value="${gross}" readonly style="width:100%;padding:4px 6px;border:none;background:#f8fafc;font-size:12px;text-align:right;color:var(--muted)" data-row="${rowCount}" data-field="gross"></td>
+    <td><input type="number" placeholder="0" value="${disc}" min="0" max="100" step="0.01" oninput="calcRow(this)" style="width:100%;padding:4px 6px;border:none;background:transparent;font-size:12px;text-align:right" data-row="${rowCount}" data-field="disc"></td>
+    <td><input type="number" placeholder="0.00" value="${net}" readonly style="width:100%;padding:4px 6px;border:none;background:#f8fafc;font-size:12px;text-align:right;font-weight:700;color:var(--primary)" data-row="${rowCount}" data-field="net"></td>
+    <td><button type="button" class="del-row" onclick="delRow('row-${rowCount}')">✕</button></td>
+  `;
+  document.getElementById('items-body').appendChild(tr);
+  if(item) recalcAll();
+}
+
+function delRow(id){
+  document.getElementById(id).remove();
+  reNumberRows();
+  recalcAll();
+}
+
+function reNumberRows(){
+  document.querySelectorAll('#items-body tr').forEach((tr,i)=>{
+    const cell=tr.querySelector('.sno-cell');
+    if(cell) cell.textContent=i+1;
+  });
+}
+
+function onCodeInput(input){
+  // Uppercase
+  input.value=input.value.toUpperCase();
+}
+
+async function lookupProduct(input){
+  const code=input.value.trim().toUpperCase();
+  if(!code) return;
+  const row=input.closest('tr');
+  // Check cache first
+  let prod=productCache[code];
+  if(!prod){
+    prod=await api('/api/products/'+code);
+    if(prod && prod.id) productCache[code]=prod;
+  }
+  if(prod && prod.id){
+    row.querySelector('[data-field="desc"]').value=prod.description;
+    row.querySelector('[data-field="rate"]').value=prod.rate;
+    calcRow(row.querySelector('[data-field="qty"]'));
+  }
+}
+
+function calcRow(input){
+  const row=input.closest('tr');
+  const qty=parseFloat(row.querySelector('[data-field="qty"]').value)||0;
+  const rate=parseFloat(row.querySelector('[data-field="rate"]').value)||0;
+  const disc=parseFloat(row.querySelector('[data-field="disc"]').value)||0;
+  const gross=qty*rate;
+  const net=gross*(1-disc/100);
+  row.querySelector('[data-field="gross"]').value=gross.toFixed(2);
+  row.querySelector('[data-field="net"]').value=net.toFixed(2);
+  recalcAll();
+}
+
+function recalcAll(){
+  let tQty=0,tGross=0,tNet=0;
+  document.querySelectorAll('#items-body tr').forEach(tr=>{
+    tQty+=parseFloat(tr.querySelector('[data-field="qty"]')?.value)||0;
+    tGross+=parseFloat(tr.querySelector('[data-field="gross"]')?.value)||0;
+    tNet+=parseFloat(tr.querySelector('[data-field="net"]')?.value)||0;
+  });
+  document.getElementById('foot-qty').textContent=tQty||'';
+  document.getElementById('foot-gross').textContent=tGross?'₹'+tGross.toFixed(2):'';
+  document.getElementById('foot-net').textContent=tNet?'₹'+tNet.toFixed(2):'';
+
+  const freight=parseFloat(document.getElementById('freight_charges').value)||0;
+  const gunni=parseFloat(document.getElementById('gunni_charges').value)||0;
+  const roundOff=parseFloat(document.getElementById('round_off').value)||0;
+  const netPayable=tNet+freight+gunni+roundOff;
+
+  document.getElementById('net-payable-display').textContent=netPayable.toFixed(2);
+  document.getElementById('net-words').textContent=numberToWords(netPayable);
+}
+
+// ── NUMBER TO WORDS ──
+function numberToWords(n){
+  const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE',
+    'TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+  const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+  function two(n){return n<20?ones[n]:tens[Math.floor(n/10)]+(n%10?' '+ones[n%10]:'')}
+  function three(n){return n>=100?ones[Math.floor(n/100)]+' HUNDRED'+(n%100?' AND '+two(n%100):''):two(n)}
+  n=Math.round(n); if(!n) return 'ZERO RUPEES ONLY';
+  let p=[];
+  if(n>=10000000){p.push(three(Math.floor(n/10000000))+' CRORE');n%=10000000;}
+  if(n>=100000){p.push(three(Math.floor(n/100000))+' LAKH');n%=100000;}
+  if(n>=1000){p.push(three(Math.floor(n/1000))+' THOUSAND');n%=1000;}
+  if(n>=100){p.push(three(Math.floor(n/100))+' HUNDRED');n%=100;}
+  if(n) p.push(two(n));
+  return p.join(' ')+' RUPEES ONLY';
+}
+
+// ── COLLECT FORM DATA ──
+function collectData(){
+  const rows=[];
+  let sno=1;
+  document.querySelectorAll('#items-body tr').forEach(tr=>{
+    const code=tr.querySelector('input:nth-of-type(1)').value.trim();
+    const desc=tr.querySelector('[data-field="desc"]').value.trim();
+    const qty=parseFloat(tr.querySelector('[data-field="qty"]').value)||0;
+    const rate=parseFloat(tr.querySelector('[data-field="rate"]').value)||0;
+    const disc=parseFloat(tr.querySelector('[data-field="disc"]').value)||0;
+    const gross=parseFloat(tr.querySelector('[data-field="gross"]').value)||0;
+    const net=parseFloat(tr.querySelector('[data-field="net"]').value)||0;
+    if(code||desc) rows.push({sno:sno++,product_code:code,description:desc,qty,rate,discount_pct:disc,gross_amount:gross,net_amount:net});
+  });
+
+  const tQty=rows.reduce((a,r)=>a+r.qty,0);
+  const tGross=rows.reduce((a,r)=>a+r.gross_amount,0);
+  const tNet=rows.reduce((a,r)=>a+r.net_amount,0);
+  const freight=parseFloat(document.getElementById('freight_charges').value)||0;
+  const gunni=parseFloat(document.getElementById('gunni_charges').value)||0;
+  const roundOff=parseFloat(document.getElementById('round_off').value)||0;
+  const netPayable=tNet+freight+gunni+roundOff;
+  const shipSame=document.querySelector('[name="ship_type"]:checked').value==='same';
+
+  return {
+    invoice_no:document.getElementById('invoice_no').value,
+    date:document.getElementById('inv_date').value,
+    customer_id:document.getElementById('customer_id').value,
+    transport:document.getElementById('transport').value,
+    lr_no:document.getElementById('lr_no').value,
+    no_of_bundles:document.getElementById('no_of_bundles').value,
+    place_of_supply:document.getElementById('place_of_supply').value,
+    ship_same_as_bill:shipSame,
+    ship_address:shipSame?'':document.getElementById('ship_address').value,
+    ship_mobile:shipSame?'':document.getElementById('ship_mobile').value,
+    freight_charges:freight, gunni_charges:gunni, round_off:roundOff,
+    terms:document.getElementById('terms').value,
+    total_qty:tQty, total_gross:tGross, total_net:tNet, net_payable:netPayable,
+    items:rows
+  };
+}
+
+// ── SAVE ──
+document.getElementById('invoice-form').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const custId=document.getElementById('customer_id').value;
+  if(!custId){toast('Please select a customer','error');return;}
+  const btn=document.getElementById('save-btn');
+  btn.innerHTML='<span class="spinner"></span> Saving...'; btn.disabled=true;
+  const data=collectData();
+  const invId=document.getElementById('invoice-id').value;
+  let r;
+  if(invId){ r=await api('/api/invoices/'+invId,'PUT',data); }
+  else { r=await api('/api/invoices','POST',data); }
+  btn.innerHTML='<i class="fa fa-save"></i> Save Invoice'; btn.disabled=false;
+  if(r.success||r.id){
+    toast('Invoice saved!','success');
+    const savedId=r.id||invId;
+    document.getElementById('invoice-id').value=savedId;
+    document.getElementById('pdf-btn').style.display='';
+    document.getElementById('print-btn').style.display='';
+  } else toast('Error: '+(r.error||'Unknown error'),'error');
+});
+
+// ── PDF ──
+function downloadPDF(){
+  const id=document.getElementById('invoice-id').value;
+  if(!id){toast('Save invoice first','error');return;}
+  window.open('/api/invoices/'+id+'/pdf','_blank');
+}
+function printPDF(){
+  const id=document.getElementById('invoice-id').value;
+  if(!id){toast('Save invoice first','error');return;}
+  const w=window.open('/api/invoices/'+id+'/pdf','_blank');
+  if(w) setTimeout(()=>w.print(),500);
+}
+</script>
+{% endblock %}
